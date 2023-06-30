@@ -7,22 +7,6 @@ if( nextflow.version.matches(">= 20.07.1") ){
     nextflow.preview.dsl=2
 }
 
-process Basecalling {
-    publishDir "${params.out_dir}/basecall"
-
-    input:
-    path fast5s
-
-    output:
-    path "all.fastq.gz", emit: ch_fastq
-
-    script:
-    """
-    guppy_basecaller -i $fast5s -r -s fastq -c ${params.guppy_model} --device auto --num_callers 4 --cpu_threads_per_caller 4 --compress_fastq
-    cat fastq/pass/*.fastq.gz >> all.fastq.gz
-    """
-}
-
 
 process Alignment{
     publishDir "${params.out_dir}/alignment"
@@ -182,13 +166,7 @@ process Evaluation{
 }
 
 workflow {
-    if [ ${params.runBasecalling} == true ]; then
-        ch_fast5 = Channel.fromPath(params.fast5s)
-        ch_fastq = Basecalling(ch_fast5)
-    else
-        ch_fastq = Channel.fromPath(params.fastq)
-    fi
-
+    ch_fastq = Channel.fromPath(params.fastq)
     ch_reference = Channel.fromPath(params.reference)
 
     (ch_bam,ch_bai)=Alignment(ch_fastq, ch_reference)
