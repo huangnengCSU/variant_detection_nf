@@ -12,12 +12,12 @@ process Alignment{
     publishDir "${params.out_dir}/alignment"
 
     input:
-    path ch_fastq
-    path ch_reference 
+        path ch_fastq
+        path ch_reference 
 
     output:
-    path "reads2ref.sorted.bam", emit: ch_bam
-    path "reads2ref.sorted.bam.bai", emit: ch_bai
+        path "reads2ref.sorted.bam", emit: ch_bam
+        path "reads2ref.sorted.bam.bai", emit: ch_bai
 
     script:
     """
@@ -32,6 +32,7 @@ process Alignment{
     samtools view -bS -@ ${params.nthreads} reads2ref.sam -o reads2ref.bam
     samtools sort -@ ${params.nthreads} reads2ref.bam -o reads2ref.sorted.bam
     samtools index -@ ${params.nthreads} reads2ref.sorted.bam
+    samtools faidx $ch_reference
     """
 }
 
@@ -40,7 +41,9 @@ process Clair3Calling{
 
     input:
     path ch_bam
+    path ch_bai
     path ch_reference
+    path ch_reference_fai
 
     output:
     path "final.vcf", emit: ch_vcf
@@ -63,7 +66,9 @@ process PepperDeepVariantCalling{
 
     input:
     path ch_bam
+    path ch_bai
     path ch_reference
+    path ch_reference_fai
 
     output:
     path "final.vcf", emit: ch_vcf
@@ -88,7 +93,9 @@ process NanoSNPCalling{
 
     input:
     path ch_bam
+    path ch_bai
     path ch_reference
+    path ch_reference_fai
 
     output:
     path "final.vcf", emit: ch_vcf
@@ -165,21 +172,25 @@ process Evaluation{
     """
 }
 
+ch_fastq=Channel.fromPath(params.fastq)
+ch_reference=Channel.fromPath(params.reference)
+ch_reference_fai=Channel.fromPath(params.reference+".fai")
+
+
 workflow {
-    ch_fastq = Channel.fromPath(params.fastq)
-    ch_reference = Channel.fromPath(params.reference)
 
     (ch_bam,ch_bai)=Alignment(ch_fastq, ch_reference)
-    
-    if [ ${params.snp_caller} == "clair3" ]; then
-        ch_vcf=Clair3Calling(ch_bam, ch_reference)
-    elif [ ${params.snp_caller} == "pepper" ]; then
-        ch_vcf=PepperDeepVariantCalling(ch_bam, ch_reference)
-    elif [ ${params.snp_caller} == "nanosnp" ]; then
-        ch_vcf=NanoSNPCalling(ch_bam, ch_reference)
-    else
+    if ( params.snp_caller == "clair3" ){
+        ch_vcf=Clair3Calling(ch_bam, ch_bai, ch_reference,ch_reference_fai)
+    }
+    else if ( params.snp_caller == "pepper" ){
+        ch_vcf=PepperDeepVariantCalling(ch_bam, ch_bai, ch_reference,ch_reference_fai)
+    }
+    else if ( params.snp_caller == "nanosnp" ){
+        ch_vcf=NanoSNPCalling(ch_bam, ch_bai, ch_reference,ch_reference_fai)
+    }
+    else{
         echo "Error: snp_caller must be either 'clair3', 'pepper', or 'nanosnp'"
         exit 1
-    fi
-    ch_happy_summary=Evaluation(ch_vcf, ch_reference)
+    }
 }
