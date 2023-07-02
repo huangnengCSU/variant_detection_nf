@@ -77,10 +77,10 @@ process PepperDeepVariantCalling{
     """
     if [ ${params.tgs_type} == "ont" ]; then
         run_pepper_margin_deepvariant call_variant -b ${ch_bam} -f ${ch_reference} -o variant_output -t ${params.nthreads} --ont_r9_guppy5_sup
-        mv variant_output/PEPPER_MARGIN_DEEPVARIANT_OUTPUT.vcf final.vcf
+        gzip -fdc variant_output/PEPPER_MARGIN_DEEPVARIANT_OUTPUT.vcf.gz > final.vcf
     elif [ ${params.tgs_type} == "hifi" ]; then
         run_pepper_margin_deepvariant call_variant -b ${ch_bam} -f ${ch_reference} -o variant_output -t ${params.nthreads} --hifi
-        mv variant_output/PEPPER_MARGIN_DEEPVARIANT_OUTPUT.vcf final.vcf
+        gzip -fdc variant_output/PEPPER_MARGIN_DEEPVARIANT_OUTPUT.vcf.gz > final.vcf
     else
         echo "Error: tgs_type must be either 'ont' or 'hifi' for pepper_margin_deepvariant"
         exit 1
