@@ -102,8 +102,11 @@ process NanoSNPCalling{
 
     script:
     """
-    if [ ${params.tgs_type} == "ont" ]; then
+    if [ ${params.tgs_type} == "ont" ] && [ !${params.usecontig} ]; then
         run_caller.sh -b ${ch_bam} -f ${ch_reference} -t ${params.nthreads} -c ${params.coverage} -o variant_output
+        mv variant_output/merge.vcf final.vcf
+    elif [ ${params.tgs_type} == "ont" ] && [ ${params.usecontig} ]; then
+        run_caller.sh -b ${ch_bam} -f ${ch_reference} -t ${params.nthreads} -c ${params.coverage} -g -o variant_output
         mv variant_output/merge.vcf final.vcf
     else
         echo "Error: tgs_type must be 'ont' for nanosnp"
