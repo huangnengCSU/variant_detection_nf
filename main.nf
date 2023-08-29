@@ -18,13 +18,18 @@ process Alignment{
     output:
         path "reads2ref.sorted.bam", emit: ch_bam
         path "reads2ref.sorted.bam.bai", emit: ch_bai
+        path "reference.fa", emit: ch_ref
+        path "reference.fa.fai", emit: ch_ref_fai
 
     script:
     """
+    ln -s ${ch_reference} reference.fa
+    samtools faidx reference.fa
+
     if [ ${params.tgs_type} == "ont" ]; then
-        minimap2 -ax map-ont -t ${params.nthreads} $ch_reference $ch_fastq > reads2ref.sam
+        minimap2 -ax map-ont -t ${params.nthreads} reference.fa $ch_fastq > reads2ref.sam
     elif [ ${params.tgs_type} == "pac" ]; then
-        minimap2 -ax map-pb -t ${params.nthreads} $ch_reference $ch_fastq > reads2ref.sam
+        minimap2 -ax map-pb -t ${params.nthreads} reference.fa $ch_fastq > reads2ref.sam
     else
         echo "Error: tgs_type must be either 'ont' or 'pac'"
         exit 1
@@ -32,7 +37,6 @@ process Alignment{
     samtools view -bS -@ ${params.nthreads} reads2ref.sam -o reads2ref.bam
     samtools sort -@ ${params.nthreads} reads2ref.bam -o reads2ref.sorted.bam
     samtools index -@ ${params.nthreads} reads2ref.sorted.bam
-    samtools faidx $ch_reference
     """
 }
 
@@ -42,8 +46,8 @@ process Clair3Calling{
     input:
     path ch_bam
     path ch_bai
-    path ch_reference
-    path ch_reference_fai
+    path ch_ref
+    path ch_ref_fai
 
     output:
     path "final.vcf", emit: ch_vcf
@@ -51,7 +55,7 @@ process Clair3Calling{
     script:
     """
     if [[ ${params.tgs_type} == "ont" ]] || [[ ${params.tgs_type} == "hifi" ]]; then
-        run_clair3.sh --bam_fn=${ch_bam} --ref_fn=${ch_reference} --threads=${params.nthreads} --platform=${params.tgs_type} --model_path="/opt/models/${params.tgs_type}" --output="variant_output"
+        run_clair3.sh --bam_fn=${ch_bam} --ref_fn=${ch_ref} --threads=${params.nthreads} --platform=${params.tgs_type} --model_path="/opt/models/${params.tgs_type}" --output="variant_output"
         gzip -fdc variant_output/merge_output.vcf.gz > final.vcf
 
     else
@@ -67,8 +71,8 @@ process PepperDeepVariantCalling{
     input:
     path ch_bam
     path ch_bai
-    path ch_reference
-    path ch_reference_fai
+    path ch_ref
+    path ch_ref_fai
 
     output:
     path "final.vcf", emit: ch_vcf
@@ -76,10 +80,10 @@ process PepperDeepVariantCalling{
     script:
     """
     if [ ${params.tgs_type} == "ont" ]; then
-        run_pepper_margin_deepvariant call_variant -b ${ch_bam} -f ${ch_reference} -o variant_output -t ${params.nthreads} --ont_r9_guppy5_sup
+        run_pepper_margin_deepvariant call_variant -b ${ch_bam} -f ${ch_ref} -o variant_output -t ${params.nthreads} --ont_r9_guppy5_sup
         gzip -fdc variant_output/PEPPER_MARGIN_DEEPVARIANT_FINAL_OUTPUT.vcf.gz > final.vcf
     elif [ ${params.tgs_type} == "hifi" ]; then
-        run_pepper_margin_deepvariant call_variant -b ${ch_bam} -f ${ch_reference} -o variant_output -t ${params.nthreads} --hifi
+        run_pepper_margin_deepvariant call_variant -b ${ch_bam} -f ${ch_ref} -o variant_output -t ${params.nthreads} --hifi
         gzip -fdc variant_output/PEPPER_MARGIN_DEEPVARIANT_FINAL_OUTPUT.vcf.gz > final.vcf
     else
         echo "Error: tgs_type must be either 'ont' or 'hifi' for pepper_margin_deepvariant"
@@ -94,8 +98,8 @@ process NanoSNPCalling{
     input:
     path ch_bam
     path ch_bai
-    path ch_reference
-    path ch_reference_fai
+    path ch_ref
+    path ch_ref_fai
 
     output:
     path "final.vcf", emit: ch_vcf
@@ -104,11 +108,11 @@ process NanoSNPCalling{
     """
     if [ ${params.tgs_type} == "ont" ] && [[ ! ${params.usecontig} ]]; then
         echo "run1"
-        run_caller.sh -b ${ch_bam} -f ${ch_reference} -t ${params.nthreads} -c ${params.coverage} -o variant_output
+        run_caller.sh -b ${ch_bam} -f ${ch_ref} -t ${params.nthreads} -c ${params.coverage} -o variant_output
         mv variant_output/merge.vcf final.vcf
     elif [ ${params.tgs_type} == "ont" ] && [ ${params.usecontig} ]; then
         echo "run2"
-        run_caller.sh -b ${ch_bam} -f ${ch_reference} -t ${params.nthreads} -c ${params.coverage} -g -o variant_output
+        run_caller.sh -b ${ch_bam} -f ${ch_ref} -t ${params.nthreads} -c ${params.coverage} -g -o variant_output
         mv variant_output/merge.vcf final.vcf
     else
         echo "Error: tgs_type must be 'ont' for nanosnp"
@@ -166,33 +170,33 @@ process Evaluation{
 
     input:
     path ch_vcf
-    path ch_reference
+    path ch_ref
+    path ch_ref_fai
 
     output:
     path "hap_output/happy.output.summary.csv", emit: ch_happy_summary
 
     script:
     """
-    /opt/hap.py/bin/hap.py ${params.true_vcf} ${ch_vcf} -f ${params.true_bed} -r ${ch_reference} -o "hap_output/happy.output" --pass-only --engine=vcfeval --threads=${params.nthreads}
+    /opt/hap.py/bin/hap.py ${params.true_vcf} ${ch_vcf} -f ${params.true_bed} -r ${ch_ref} -o "hap_output/happy.output" --pass-only --engine=vcfeval --threads=${params.nthreads}
     """
 }
 
 ch_fastq=Channel.fromPath(params.fastq)
 ch_reference=Channel.fromPath(params.reference)
-ch_reference_fai=Channel.fromPath(params.reference+".fai")
 
 
 workflow {
 
-    (ch_bam,ch_bai)=Alignment(ch_fastq, ch_reference)
+    (ch_bam,ch_bai,ch_ref,ch_ref_fai)=Alignment(ch_fastq, ch_reference)
     if ( params.snp_caller == "clair3" ){
-        ch_vcf=Clair3Calling(ch_bam, ch_bai, ch_reference,ch_reference_fai)
+        ch_vcf=Clair3Calling(ch_bam, ch_bai, ch_ref,ch_ref_fai)
     }
     else if ( params.snp_caller == "pepper" ){
-        ch_vcf=PepperDeepVariantCalling(ch_bam, ch_bai, ch_reference,ch_reference_fai)
+        ch_vcf=PepperDeepVariantCalling(ch_bam, ch_bai, ch_ref,ch_ref_fai)
     }
     else if ( params.snp_caller == "nanosnp" ){
-        ch_vcf=NanoSNPCalling(ch_bam, ch_bai, ch_reference,ch_reference_fai)
+        ch_vcf=NanoSNPCalling(ch_bam, ch_bai, ch_ref,ch_ref_fai)
     }
     else{
         echo "Error: snp_caller must be either 'clair3', 'pepper', or 'nanosnp'"
