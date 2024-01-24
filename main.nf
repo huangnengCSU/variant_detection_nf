@@ -28,10 +28,10 @@ process Alignment{
 
     if [ ${params.tgs_type} == "ont" ]; then
         minimap2 -ax map-ont -t ${params.nthreads} reference.fa $ch_fastq > reads2ref.sam
-    elif [ ${params.tgs_type} == "pac" ]; then
+    elif [ ${params.tgs_type} == "hifi" ]; then
         minimap2 -ax map-pb -t ${params.nthreads} reference.fa $ch_fastq > reads2ref.sam
     else
-        echo "Error: tgs_type must be either 'ont' or 'pac'"
+        echo "Error: tgs_type must be either 'ont' or 'hifi'"
         exit 1
     fi
     samtools view -bS -@ ${params.nthreads} reads2ref.sam -o reads2ref.bam
